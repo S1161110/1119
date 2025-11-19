@@ -205,3 +205,21 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# ------------------------------------
+# 額外追加: GIS 資料檔案
+# ------------------------------------
+# 這些檔案通常太大，不適合放進 Git
+*.tif
+*.tiff
+*.TIF
+*.TIFF
+*.asc
+*.shp
+*.shx
+*.dbf
+*.prj
+*.cpg
+*.geojson
+*.kml
+*.gpkg
