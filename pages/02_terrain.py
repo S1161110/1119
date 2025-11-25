@@ -11,7 +11,7 @@ def create_3d_map():
     if not MAPTILER_KEY:
         # 如果沒有 Key，回傳一個基礎地圖，但不會有地形
         m = leafmap.Map(
-            center=[120.9, 23.7], 
+            center=[121.35, 23.64], 
             zoom=7, 
             style="OpenStreetMap",
         )
@@ -25,7 +25,7 @@ def create_3d_map():
     m = leafmap.Map(
         style=style_url,
         center=[121.2, 23.8], # 台灣中心偏向山區，方便觀察地形
-        zoom=9,
+        zoom=13,
         pitch=65,  # 傾斜角度 (65度)
         bearing=15, # 旋轉角度 (15度)
         # 啟用地形：當使用 MapTiler Style 時，通常只需設定 style URL，
