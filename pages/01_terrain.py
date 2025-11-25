@@ -11,7 +11,7 @@ def create_3d_map():
     if not MAPTILER_KEY:
         # 如果沒有 Key，回傳一個基礎地圖，但不會有地形
         m = leafmap.Map(
-            center=[120.9, 23.7], 
+            center=[121.353, 23.646], 
             zoom=7, 
             style="OpenStreetMap",
         )
@@ -24,7 +24,7 @@ def create_3d_map():
     
     m = leafmap.Map(
         style=style_url,
-        center=[121.380, 23.632] ,
+        center=[121.353, 23.646] ,
         zoom=12,
         pitch=65,  # 傾斜角度 (65度)
         bearing=15, # 旋轉角度 (15度)

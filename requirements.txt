@@ -2,7 +2,7 @@ pandas
 plotly
 geopandas
 leafmap
-ipyleaflet
+ipyleaflet==0.17.0
 maplibre
 rasterio
 rioxarray
