@@ -1,38 +1,34 @@
-import solara
-import pandas as pd
-import plotly.express as px
+markdown = """
+## 台灣觀測史上最大規模崩塌，形成巨型堰塞湖
+時間倒回今年 7 月 21 日，薇帕颱風在東部帶來的豪雨，導致馬太鞍溪上游發生大規模崩塌，面積達到五百公頃。  
+農村水保署減災監測組組長陳振宇表示，與 2009 年莫拉克風災在楠梓仙溪形成、並導致小林村滅村的堰塞湖相比，馬太鞍溪堰塞湖的崩塌規模超過十倍以上：「它應該是台灣這一兩個世紀以來，我們觀測到最大的一次崩塌。」
 
+---
 
-# 準備資料
-df = pd.DataFrame(
-    {"x": [1, 2, 3, 4], "y": [10, 11, 12, 13]}
-)
-fig = px.scatter(df, x="x", y="y", title="我的 Plotly 圖表")
+## 堰塞湖形成原因
+馬太鞍溪流域位於中央山脈東側，地勢陡峭、地質破碎，加上連日豪雨使岩層含水量增加，土石結構被削弱，終於在極短時間內發生大型崩塌。  
+大量岩體滑落至河道後，直接堵住溪流，形成臨時性的「堰塞湖」。
 
-@solara.component
-def Page():
-    
-    solara.Markdown("### 水平排列 (Row)")
+---
 
-    # 'with' 語法會自動將內部的所有元件放入 Row 容器
-    with solara.Row():
-        solara.Markdown("欄位 1", style={"width": "30%", "border": "1px solid red"})
-        solara.Markdown("欄位 2", style={"width": "70%", "border": "1px solid blue"})
+## 潛在風險與災害
+堰塞湖雖然會短暫儲水，但也可能帶來重大危險：
 
-    solara.Markdown("---")
-    
-    solara.Markdown("### 垂直排列 (Column)")
-    
-    # 'with' 語法會自動將內部的所有元件放入 Column 容器
-    with solara.Column():
-        solara.Markdown("這個元件在 Row 的下面")
-        solara.Markdown("這個元件在更下面")
-    
-    solara.Markdown("### 這是另一個置中的垂直排列容器 (Column)")
+- **溢流或決堤**：若水位持續上升，土石壩可能被沖破。  
+- **下游暴洪**：一旦決堤，洪水會沿著狹窄河谷急速下沖，威脅下游聚落。  
+- **河道改變**：大量土石堆積可能使河道位置永久改變。  
+- **交通與基礎設施受損**：橋梁、道路可能遭受沖刷或掩埋。
 
-    # 'with' 語法會自動將內部的所有元件放入 Column 容器
-    with solara.Column(align="center"):
-        solara.Markdown("## 顯示 DataFrame")
-        solara.DataFrame(df)
-        solara.Markdown("## 顯示 Plotly 圖表")
-        solara.FigurePlotly(fig)
+---
+
+## 政府與研究單位的處置
+目前單位持續透過無人機、衛星影像與水文感測器監測堰塞湖變化，並評估：
+
+- 崩塌體的穩定性  
+- 湖水水位的上升速度  
+- 是否需要人工排水或局部疏導  
+
+這些監測資料將決定後續是否需要進行緊急工程，以避免二次災害。
+
+---
+"""
