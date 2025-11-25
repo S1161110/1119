@@ -8,7 +8,7 @@ def create_split_map():
         right_layer="OpenStreetMap",     # 右邊：街道圖 只能底圖圖層  不能是物件
         left_label="衛星影像",
         right_label="街道地圖",
-        center=center=[121.35, 23.64],
+        center=[121.35, 23.64],
         zoom=12,
         # ipyleaflet 的 split_map 本身就會回傳一個地圖物件，不需要額外設定 height
     )
