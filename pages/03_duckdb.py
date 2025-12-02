@@ -51,3 +51,7 @@ def create_map():
     m.add_geojson(geojson_str, layer_name="cities")
 
     return m
+
+@solara.component
+def Page():
+    return create_map().to_solara()
