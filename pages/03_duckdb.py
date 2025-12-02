@@ -1,7 +1,9 @@
 import solara
 import duckdb
 import pandas as pd
-import leafmap.maplibregl as leafmap
+import folium
+from folium import CircleMarker
+from branca.element import Figure
 
 # -----------------------------
 # 1. 資料來源 & 狀態管理
@@ -10,6 +12,7 @@ CITIES_CSV_URL = 'https://data.gishub.org/duckdb/cities.csv'
 
 all_countries = solara.reactive([])
 selected_country = solara.reactive("")
+min_population = solara.reactive(0)
 data_df = solara.reactive(pd.DataFrame())
 
 # -----------------------------
@@ -53,64 +56,62 @@ def load_filtered_data():
             LIMIT 100
         """).df()
         data_df.set(df_result)
+        if not df_result.empty:
+            min_population.set(int(df_result['population'].min()))
         con.close()
     except Exception as e:
         print(f"Error executing query: {e}")
         data_df.set(pd.DataFrame())
 
 # -----------------------------
-# 3. Leafmap 地圖 component
+# 3. Folium 地圖 component
 # -----------------------------
 @solara.component
-def CityMap(df: pd.DataFrame):
-    """顯示簡單城市地圖"""
+def CityMap(df: pd.DataFrame, min_pop: int):
+    """顯示城市地圖"""
     if df.empty:
         return solara.Info("沒有城市數據可顯示")
-    
-    m = leafmap.Map(
-        center=[20, 0],
-        zoom=2,  # 適合顯示整個世界
-        add_sidebar=True,
-        height="600px"
-    )
 
-    # 使用平面底圖
-    m.add_basemap("Carto Light", before_id=m.first_symbol_layer_id)
-    
-    # 簡單平面底圖
-    m.add_basemap("Carto Light", before_id=m.first_symbol_layer_id)
-    
+    # 篩選人口
+    df_filtered = df[df['population'] >= min_pop]
+
+    if df_filtered.empty:
+        return solara.Info("沒有符合篩選的人口城市")
+
+    # 以第一個城市中心作為地圖中心
+    center = [df_filtered['latitude'].iloc[0], df_filtered['longitude'].iloc[0]]
+    fig = Figure(width=800, height=500)
+    m = folium.Map(location=center, zoom_start=3, tiles="CartoDB positron")
+    fig.add_child(m)
+
     # 加國家邊界
-    m.add_geojson(
+    folium.GeoJson(
         "https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson",
         name="Countries",
-        layer_type="line",
-        paint={"line-color": "#000000", "line-width": 1},
-    )
-    
+        style_function=lambda x: {"color": "black", "weight": 1, "fillOpacity": 0}
+    ).add_to(m)
+
     # 加城市點
-    features = []
-    for _, row in df.iterrows():
-        features.append({
-            "type": "Feature",
-            "geometry": {"type": "Point", "coordinates": [row["longitude"], row["latitude"]]},
-            "properties": {
-                "name": row["name"],
-                "population": int(row["population"]) if row["population"] else None
-            }
-        })
-    geojson = {"type": "FeatureCollection", "features": features}
-    m.add_geojson(geojson, name="Cities")
-    
-    return m.to_solara()
+    for _, row in df_filtered.iterrows():
+        CircleMarker(
+            location=[row.latitude, row.longitude],
+            radius=5,
+            popup=f"{row.name} ({row.population})",
+            color="red",
+            fill=True,
+            fill_opacity=0.7
+        ).add_to(m)
+
+    return solara.HTML(fig._repr_html_())
 
 # -----------------------------
 # 4. 主頁面 Page
 # -----------------------------
 @solara.component
 def Page():
-    solara.Title("城市地圖篩選 (簡單平面)")
+    solara.Title("城市地圖篩選 (Folium 平面版)")
 
+    # 初始化資料
     solara.use_effect(load_country_list, dependencies=[])
     solara.use_effect(load_filtered_data, dependencies=[selected_country.value])
 
@@ -121,8 +122,18 @@ def Page():
             values=all_countries.value
         )
 
+        # Slider 篩選人口
+        solara.Slider(
+            label="最低人口",
+            value=min_population,
+            min=0,
+            max=max(data_df.value['population'].max() if not data_df.value.empty else 0,1),
+            step=10000
+        )
+
+    # 顯示地圖
     if selected_country.value and not data_df.value.empty:
-        CityMap(data_df.value)
+        CityMap(data_df.value, min_population.value)
     else:
         solara.Info("正在載入資料...")
 
