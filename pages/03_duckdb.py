@@ -73,9 +73,9 @@ def CityMap(df: pd.DataFrame):
         center=center,
         zoom=3,
         add_sidebar=True,
-        height="600px",
-        world_copy_jump=False
+        height="600px"
     )
+    m.set_bounds([-180, -85, 180, 85])
     
     # 簡單平面底圖
     m.add_basemap("Carto Light", before_id=m.first_symbol_layer_id)
