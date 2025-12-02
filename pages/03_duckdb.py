@@ -1,59 +1,120 @@
+import solara
 import duckdb
 import pandas as pd
 import leafmap.maplibregl as leafmap
-import json
-import solara
 
+# -----------------------------
+# 1. 資料來源 & 狀態管理
+# -----------------------------
+CITIES_CSV_URL = 'https://data.gishub.org/duckdb/cities.csv'
 
-def create_map():
+all_countries = solara.reactive([])
+selected_country = solara.reactive("")
+data_df = solara.reactive(pd.DataFrame())
 
-    # DuckDB
-    con = duckdb.connect()
-    con.install_extension("httpfs")
-    con.load_extension("httpfs")
+# -----------------------------
+# 2. 資料載入函數
+# -----------------------------
+def load_country_list():
+    """初始化：載入國家清單"""
+    try:
+        con = duckdb.connect()
+        con.install_extension("httpfs")
+        con.load_extension("httpfs")
+        result = con.sql(f"""
+            SELECT DISTINCT country
+            FROM '{CITIES_CSV_URL}'
+            ORDER BY country
+        """).fetchall()
+        country_list = [row[0] for row in result]
+        all_countries.set(country_list)
+        if "USA" in country_list:
+            selected_country.set("USA")
+        elif country_list:
+            selected_country.set(country_list[0])
+        con.close()
+    except Exception as e:
+        print(f"Error loading countries: {e}")
 
-    df = con.sql("""
-        SELECT name, country, population, lon, lat
-        FROM 'https://data.gishub.org/duckdb/cities.csv'
-        LIMIT 200;
-    """).df()
+def load_filtered_data():
+    """根據選中國家載入城市資料"""
+    country_name = selected_country.value
+    if not country_name:
+        return
+    try:
+        con = duckdb.connect()
+        con.install_extension("httpfs")
+        con.load_extension("httpfs")
+        df_result = con.sql(f"""
+            SELECT name, country, population, latitude, longitude
+            FROM '{CITIES_CSV_URL}'
+            WHERE country = '{country_name}'
+            ORDER BY population DESC
+            LIMIT 100
+        """).df()
+        data_df.set(df_result)
+        con.close()
+    except Exception as e:
+        print(f"Error executing query: {e}")
+        data_df.set(pd.DataFrame())
 
-    # 轉 GeoJSON
+# -----------------------------
+# 3. Leafmap 地圖 component
+# -----------------------------
+@solara.component
+def CityMap(df: pd.DataFrame):
+    """顯示城市地圖"""
+    if df.empty:
+        return solara.Info("沒有城市數據可顯示")
+    center = [df['latitude'].iloc[0], df['longitude'].iloc[0]]
+    m = leafmap.Map(
+        center=center,
+        zoom=4,
+        add_sidebar=True,
+        height="600px"
+    )
+    m.add_basemap("Esri.WorldImagery", before_id=m.first_symbol_layer_id)
+    
+    # 轉成 GeoJSON
     features = []
     for _, row in df.iterrows():
         features.append({
             "type": "Feature",
-            "geometry": {
-                "type": "Point",
-                "coordinates": [row["lon"], row["lat"]],
-            },
+            "geometry": {"type": "Point", "coordinates": [row["longitude"], row["latitude"]]},
             "properties": {
                 "name": row["name"],
-                "country": row["country"],
-                "population": row["population"],
-            },
+                "population": int(row["population"]) if row["population"] else None
+            }
         })
+    geojson = {"type": "FeatureCollection", "features": features}
+    m.add_geojson(geojson)
+    return m.to_solara()
 
-    geojson_data = {
-        "type": "FeatureCollection",
-        "features": features
-    }
-
-    geojson_str = json.dumps(geojson_data)
-
-    # MapLibre 地圖
-    m = leafmap.Map(
-        center=[20, 0],
-        zoom=2,
-        height="750px",
-        style="https://demotiles.maplibre.org/style.json"
-    )
-
-    # 加點（純點，沒有 popup）
-    m.add_geojson(geojson_str, layer_name="cities")
-
-    return m
-
+# -----------------------------
+# 4. 主頁面 Page
+# -----------------------------
 @solara.component
 def Page():
-    return create_map().to_solara()
+    solara.Title("城市地圖篩選 (DuckDB + Solara + Leafmap)")
+    
+    solara.use_effect(load_country_list, dependencies=[])
+    solara.use_effect(load_filtered_data, dependencies=[selected_country.value])
+
+    # 篩選下拉框
+    with solara.Card(title="城市篩選器"):
+        solara.Select(
+            label="選擇國家",
+            value=selected_country,
+            values=all_countries.value
+        )
+
+    # 顯示地圖
+    if selected_country.value and not data_df.value.empty:
+        CityMap(data_df.value)
+    else:
+        solara.Info("正在載入資料...")
+
+# -----------------------------
+# 5. 啟動 Page
+# -----------------------------
+Page()
