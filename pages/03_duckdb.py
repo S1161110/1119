@@ -1,143 +1,195 @@
-#1125改到UI，只要剩下篩選下拉框就好，其他可以刪掉（還沒改完
-import json
-import duckdb
 import solara
-import ipywidgets as widgets
+import duckdb
+import pandas as pd
+import plotly.express as px
 import leafmap.maplibregl as leafmap
-import matplotlib.pyplot as plt
 
-def create_map():
+# -----------------------------
+# 1. 全域狀態管理
+# -----------------------------
+CITIES_CSV_URL = 'https://data.gishub.org/duckdb/cities.csv'
+
+all_countries = solara.reactive([])
+selected_country = solara.reactive("")
+population_threshold = solara.reactive(1_000_000)   # 新增：人口門檻
+
+data_df = solara.reactive(pd.DataFrame())
+
+# -----------------------------
+# 2. 載入國家清單
+# -----------------------------
+def load_country_list():
+    try:
+        con = duckdb.connect()
+        con.install_extension("httpfs")
+        con.load_extension("httpfs")
+        result = con.sql(f"""
+            SELECT DISTINCT country
+            FROM '{CITIES_CSV_URL}'
+            ORDER BY country
+        """).fetchall()
+
+        country_list = [row[0] for row in result]
+        all_countries.set(country_list)
+
+        # 預設選 USA 或第一個
+        if "USA" in country_list:
+            selected_country.set("USA")
+        elif country_list:
+            selected_country.set(country_list[0])
+
+        con.close()
+    except Exception as e:
+        print("Error loading countries:", e)
+
+# -----------------------------
+# 3. 載入該國家 + 人口門檻的城市
+# -----------------------------
+def load_filtered_data():
+    country_name = selected_country.value
+    threshold = population_threshold.value
+
+    if not country_name:
+        return
+
+    try:
+        con = duckdb.connect()
+        con.install_extension("httpfs")
+        con.load_extension("httpfs")
+
+        df_result = con.sql(f"""
+            SELECT name, country, population, latitude, longitude
+            FROM '{CITIES_CSV_URL}'
+            WHERE country = '{country_name}'
+              AND population >= {threshold}
+            ORDER BY population DESC
+        """).df()
+
+        data_df.set(df_result)
+        con.close()
+
+    except Exception as e:
+        print("Error loading filtered cities:", e)
+        data_df.set(pd.DataFrame())
+
+# -----------------------------
+# 4. Leafmap 地圖元件
+# -----------------------------
+@solara.component
+def CityMap(df: pd.DataFrame):
+    if df.empty:
+        return solara.Info("沒有符合人口門檻的城市")
+
+    # 地圖中心點設為人口最大的城市
+    center = [df['latitude'].iloc[0], df['longitude'].iloc[0]]
 
     m = leafmap.Map(
+        center=center,
+        zoom=4,
         add_sidebar=True,
-        add_floating_sidebar=False,
-        sidebar_visible=True,
-        layer_manager_expanded=False,
-        height="800px",
+        height="600px"
     )
-    m.add_basemap("Esri.WorldImagery", before_id=m.first_symbol_layer_id, visible=False)
-    m.add_draw_control(controls=["polygon", "trash"])
+    m.add_basemap("Esri.WorldImagery", before_id=m.first_symbol_layer_id)
 
-    con = duckdb.connect()
-    con.install_extension("httpfs")
-    con.install_extension("spatial")
-    con.install_extension("h3", repository="community")
-    con.load_extension("httpfs")
-    con.load_extension("spatial")
-    con.load_extension("h3")
+    # 轉成 GeoJSON
+    features = []
+    for _, row in df.iterrows():
+        features.append({
+            "type": "Feature",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [row["longitude"], row["latitude"]]
+            },
+            "properties": {
+                "name": row["name"],
+                "population": int(row["population"])
+            }
+        })
 
-    url = "https://data.gishub.org/duckdb/cities.csv"
+    geojson = {"type": "FeatureCollection", "features": features}
+    m.add_geojson(geojson)
 
-    con.sql(
-        f"CREATE TABLE IF NOT EXISTS Cities AS SELECT * FROM read_parquet('{url}');"
-    )
+    return m.to_solara()
 
-    colormaps = sorted(plt.colormaps())
-
-    colormap_dropdown = widgets.Dropdown(
-        options=colormaps,
-        description="Colormap:",
-        value="inferno",
-        style={"description_width": "initial"},
-    )
-    class_slider = widgets.IntSlider(
-        description="Class:",
-        min=1,
-        max=10,
-        step=1,
-        value=5,
-        style={"description_width": "initial"},
-    )
-    apply_btn = widgets.Button(description="Apply")
-    close_btn = widgets.Button(description="Close")
-    output_widget = widgets.Output()
-    output_widget.append_stdout(
-        "Draw a polygon on the map. Then, \nclick on the 'Apply' button"
-    )
-
-    def on_apply_btn_click(change):
-        with output_widget:
-            try:
-                output_widget.outputs = ()
-                if len(m.draw_features_selected) > 0:
-                    geojson = m.draw_features_selected[0]["geometry"]
-                df = con.sql(
-                    f"""
-                SELECT * EXCLUDE (geometry), ST_AsText(geometry) AS geometry FROM h3_res4_geo
-                WHERE ST_Intersects(geometry, ST_GeomFromGeoJSON('{json.dumps(geojson)}'));
-                """
-                ).df()
-                gdf = leafmap.df_to_gdf(df)
-                if "H3 Hexagon" in m.layer_dict:
-                    m.remove_layer("H3 Hexagon")
-
-                if outline_chk.value:
-                    outline_color = "rgba(255, 255, 255, 255)"
-                else:
-                    outline_color = "rgba(255, 255, 255, 0)"
-
-                if checkbox.value:
-                    m.add_data(
-                        gdf,
-                        column="building_count",
-                        scheme="JenksCaspall",
-                        cmap=colormap_dropdown.value,
-                        k=class_slider.value,
-                        outline_color=outline_color,
-                        name="H3 Hexagon",
-                        before_id=m.first_symbol_layer_id,
-                        extrude=True,
-                        fit_bounds=False,
-                        add_legend=False,
-                    )
-                else:
-                    m.add_data(
-                        gdf,
-                        column="building_count",
-                        scheme="JenksCaspall",
-                        cmap=colormap_dropdown.value,
-                        k=class_slider.value,
-                        outline_color=outline_color,
-                        name="H3 Hexagon",
-                        before_id=m.first_symbol_layer_id,
-                        fit_bounds=False,
-                        add_legend=False,
-                    )
-
-                m.remove_from_sidebar(name="Legend")
-                m.add_legend_to_sidebar(
-                    title="Building Count",
-                    legend_dict=m.legend_dict,
-                )
-            except Exception as e:
-                with output_widget:
-                    output_widget.outputs = ()
-                    output_widget.append_stderr(str(e))
-
-    def on_close_btn_click(change):
-        m.remove_from_sidebar(name="H3 Hexagonal Grid")
-
-    apply_btn.on_click(on_apply_btn_click)
-    close_btn.on_click(on_close_btn_click)
-
-    widget = widgets.VBox(
-        [
-            widgets.HBox([checkbox, outline_chk]),
-            colormap_dropdown,
-            class_slider,
-            widgets.HBox([apply_btn, close_btn]),
-            output_widget,
-        ]
-    )
-    m.create_container()
-    m.add_to_sidebar(
-        widget, label="H3 Hexagonal Grid", widget_icon="mdi-hexagon-multiple"
-    )
-
-    return m
-
-
+# -----------------------------
+# 5. Solara 主頁面
+# -----------------------------
 @solara.component
 def Page():
-    m = create_map()
-    return m.to_solara()
+
+    solara.Title("🌍 城市人口濃度互動地圖 (DuckDB + Solara + Leafmap)")
+
+    # 初始化：載入國家清單
+    solara.use_effect(load_country_list, dependencies=[])
+
+    # 當國家 或 人口門檻 有改變 → 重新查詢 DuckDB
+    solara.use_effect(
+        load_filtered_data,
+        dependencies=[selected_country.value, population_threshold.value]
+    )
+
+    with solara.Card(title="城市篩選器"):
+        solara.Select(
+            label="選擇國家",
+            value=selected_country,
+            values=all_countries.value
+        )
+
+        # --------------------
+        # ⭐ 新增：人口門檻 slider
+        # --------------------
+        solara.SliderInt(
+            label="人口下限",
+            value=population_threshold,
+            min=0,
+            max=20_000_000,
+            step=100_000
+        )
+        solara.Markdown(f"目前人口門檻：**{population_threshold.value:,}**")
+
+    df = data_df.value
+
+    if selected_country.value and not df.empty:
+
+        solara.Markdown(f"## {selected_country.value}（人口 ≥ {population_threshold.value:,}）")
+
+        # 地圖元件
+        CityMap(df)
+
+        # 表格
+        solara.Markdown("### 📋 數據表格")
+        solara.DataFrame(df)
+
+        # --------------------
+        # Plotly 視覺化
+        # --------------------
+        solara.Markdown("### 📊 城市人口分布（Bar Chart）")
+        fig_hist = px.bar(
+            df,
+            x="name",
+            y="population",
+            color="population",
+            title=f"{selected_country.value} 城市人口分布",
+            labels={"name": "城市名稱", "population": "人口"},
+            height=400
+        )
+        fig_hist.update_layout(xaxis_tickangle=-45)
+        solara.FigurePlotly(fig_hist)
+
+        solara.Markdown("### 🥧 城市人口比例（Pie Chart）")
+        fig_pie = px.pie(
+            df,
+            names="name",
+            values="population",
+            title=f"{selected_country.value} 城市人口比例",
+            height=400
+        )
+        solara.FigurePlotly(fig_pie)
+
+    else:
+        solara.Info("沒有符合條件的城市 / 正在載入中...")
+
+# -----------------------------
+# 6. 啟動 App
+# -----------------------------
+Page()
