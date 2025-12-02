@@ -67,15 +67,15 @@ def CityMap(df: pd.DataFrame):
     if df.empty:
         return solara.Info("沒有城市數據可顯示")
     
-    # 以第一個城市中心作為地圖中心
-    center = [df['latitude'].iloc[0], df['longitude'].iloc[0]]
     m = leafmap.Map(
-        center=center,
-        zoom=3,
+        center=[20, 0],
+        zoom=2,  # 適合顯示整個世界
         add_sidebar=True,
         height="600px"
     )
-    m.set_bounds([-180, -85, 180, 85])
+
+    # 使用平面底圖
+    m.add_basemap("Carto Light", before_id=m.first_symbol_layer_id)
     
     # 簡單平面底圖
     m.add_basemap("Carto Light", before_id=m.first_symbol_layer_id)
