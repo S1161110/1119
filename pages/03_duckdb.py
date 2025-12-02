@@ -19,7 +19,6 @@ data_df = solara.reactive(pd.DataFrame())
 # 2. 資料載入函數
 # -----------------------------
 def load_country_list():
-    """初始化：載入國家清單"""
     try:
         con = duckdb.connect()
         con.install_extension("httpfs")
@@ -40,7 +39,6 @@ def load_country_list():
         print(f"Error loading countries: {e}")
 
 def load_filtered_data():
-    """根據選中國家載入城市資料"""
     country_name = selected_country.value
     if not country_name:
         return
@@ -68,30 +66,26 @@ def load_filtered_data():
 # -----------------------------
 @solara.component
 def CityMap(df: pd.DataFrame, min_pop: int):
-    """顯示城市地圖"""
     if df.empty:
         return solara.Info("沒有城市數據可顯示")
 
-    # 篩選人口
     df_filtered = df[df['population'] >= min_pop]
-
     if df_filtered.empty:
         return solara.Info("沒有符合篩選的人口城市")
 
-    # 以第一個城市中心作為地圖中心
     center = [df_filtered['latitude'].iloc[0], df_filtered['longitude'].iloc[0]]
     fig = Figure(width=800, height=500)
     m = folium.Map(location=center, zoom_start=3, tiles="CartoDB positron")
     fig.add_child(m)
 
-    # 加國家邊界
+    # 國家邊界
     folium.GeoJson(
         "https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson",
         name="Countries",
         style_function=lambda x: {"color": "black", "weight": 1, "fillOpacity": 0}
     ).add_to(m)
 
-    # 加城市點
+    # 城市點
     for _, row in df_filtered.iterrows():
         CircleMarker(
             location=[row.latitude, row.longitude],
@@ -111,7 +105,6 @@ def CityMap(df: pd.DataFrame, min_pop: int):
 def Page():
     solara.Title("城市地圖篩選 (Folium 平面版)")
 
-    # 初始化資料
     solara.use_effect(load_country_list, dependencies=[])
     solara.use_effect(load_filtered_data, dependencies=[selected_country.value])
 
@@ -122,22 +115,15 @@ def Page():
             values=all_countries.value
         )
 
-        # Slider 篩選人口
-        solara.Slider(
+        solara.Input(
             label="最低人口",
             value=min_population,
-            min=0,
-            max=max(data_df.value['population'].max() if not data_df.value.empty else 0,1),
-            step=10000
+            type="int",
         )
 
-    # 顯示地圖
     if selected_country.value and not data_df.value.empty:
         CityMap(data_df.value, min_population.value)
     else:
         solara.Info("正在載入資料...")
 
-# -----------------------------
-# 5. 啟動 Page
-# -----------------------------
 Page()
