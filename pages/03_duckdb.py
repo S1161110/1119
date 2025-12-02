@@ -15,7 +15,7 @@ def create_map():
         center=[20, 0],
     )
 
-    # 加上世界國界線（leafmap 內建）
+    # 加上世界國界線
     m.add_geojson(
         data="https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson",
         name="World Countries",
@@ -35,13 +35,14 @@ def create_map():
 
     con.sql(f"""
         CREATE TABLE IF NOT EXISTS Cities AS 
-        SELECT *, 
-        ST_Point(longitude, latitude) AS geometry
+        SELECT *
         FROM read_csv('{url}');
     """)
 
-    # 取得最小、最大人口（用於 Slider 範圍）
-    minpop, maxpop = con.sql("SELECT MIN(population), MAX(population) FROM Cities").fetchone()
+    # 取得人口上下限
+    minpop, maxpop = con.sql(
+        "SELECT MIN(population), MAX(population) FROM Cities"
+    ).fetchone()
 
     # --- UI: 人口篩選 Slider ---
     pop_slider = widgets.IntSlider(
@@ -54,7 +55,7 @@ def create_map():
         style={"description_width": "initial"},
     )
 
-    # --- 城市圖層更新 ---
+    # --- 更新城市顯示 ---
     def update_city_layer(change=None):
         # 移除舊圖層
         if "Cities Layer" in m.layer_dict:
@@ -67,7 +68,7 @@ def create_map():
             WHERE population >= {pop_slider.value};
         """).df()
 
-        # 加到地圖上（點圖層 + popup）
+        # 加到地圖上（點 + popup）
         m.add_points_from_xy(
             df,
             x="longitude",
@@ -78,17 +79,12 @@ def create_map():
             color="#ff0000",
         )
 
-    # 初始化一次
     update_city_layer()
-
-    # slider 動作觸發更新
     pop_slider.observe(update_city_layer, names="value")
 
-    # 加入側邊欄
     m.add_to_sidebar(pop_slider, label="人口篩選")
 
     return m
-
 
 
 @solara.component
