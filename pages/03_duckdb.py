@@ -5,7 +5,7 @@ import json
 
 def create_map():
 
-    # DuckDB 讀取遠端資料
+    # DuckDB
     con = duckdb.connect()
     con.install_extension("httpfs")
     con.load_extension("httpfs")
@@ -37,16 +37,17 @@ def create_map():
         "features": features
     }
 
-    # 建地圖
+    geojson_str = json.dumps(geojson_data)
+
+    # MapLibre 地圖（無 popup）
     m = leafmap.Map(
-        center=[25.03, 121.56],  # 台北
+        center=[20, 0],
         zoom=2,
         height="750px",
         style="https://demotiles.maplibre.org/style.json"
     )
 
-    # 加 GeoJSON 到 MapLibre
-    geojson_str = json.dumps(geojson_data)
+    # 加圖層（不帶 popup）
     m.add_geojson(geojson_str, layer_name="cities")
 
     return m
