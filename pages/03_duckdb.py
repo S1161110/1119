@@ -2,6 +2,8 @@ import duckdb
 import pandas as pd
 import leafmap.maplibregl as leafmap
 import json
+import solara
+
 
 def create_map():
 
@@ -39,7 +41,7 @@ def create_map():
 
     geojson_str = json.dumps(geojson_data)
 
-    # MapLibre 地圖（無 popup）
+    # MapLibre 地圖
     m = leafmap.Map(
         center=[20, 0],
         zoom=2,
@@ -47,7 +49,7 @@ def create_map():
         style="https://demotiles.maplibre.org/style.json"
     )
 
-    # 加圖層（不帶 popup）
+    # 加點（純點，沒有 popup）
     m.add_geojson(geojson_str, layer_name="cities")
 
     return m
