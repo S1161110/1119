@@ -105,7 +105,7 @@ def CityMap(df: pd.DataFrame):
 # -----------------------------
 @solara.component
 def Page():
-    solara.Title("城市地圖篩選 (簡單平面)")
+    solara.Title("國家城市篩選")
 
     solara.use_effect(load_country_list, dependencies=[])
     solara.use_effect(load_filtered_data, dependencies=[selected_country.value])
