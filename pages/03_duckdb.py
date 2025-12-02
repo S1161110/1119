@@ -6,7 +6,7 @@ import leafmap.maplibregl as leafmap
 
 def create_map():
 
-    # --- 建立地圖 ---
+    # --- 建立世界地圖 ---
     m = leafmap.Map(
         add_sidebar=True,
         sidebar_visible=True,
@@ -15,18 +15,18 @@ def create_map():
         center=[20, 0],
     )
 
-    # 加上世界國界線
+    # 世界國界
     m.add_geojson(
         data="https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson",
         name="World Countries",
-        layer_type="fill",
+        layer_type="line",
         paint={
-            "fill-color": "rgba(0,0,0,0)",
-            "fill-outline-color": "rgba(0,0,0,0.6)",
+            "line-color": "rgba(0,0,0,0.5)",
+            "line-width": 1,
         },
     )
 
-    # --- DuckDB: 載入資料集 ---
+    # --- DuckDB 載入城市資料 ---
     con = duckdb.connect()
     con.install_extension("httpfs")
     con.load_extension("httpfs")
@@ -35,16 +35,14 @@ def create_map():
 
     con.sql(f"""
         CREATE TABLE IF NOT EXISTS Cities AS 
-        SELECT *
-        FROM read_csv('{url}');
+        SELECT * FROM read_csv('{url}');
     """)
 
-    # 取得人口上下限
     minpop, maxpop = con.sql(
         "SELECT MIN(population), MAX(population) FROM Cities"
     ).fetchone()
 
-    # --- UI: 人口篩選 Slider ---
+    # --- UI ---
     pop_slider = widgets.IntSlider(
         description="人口大於：",
         min=int(minpop),
@@ -55,28 +53,49 @@ def create_map():
         style={"description_width": "initial"},
     )
 
-    # --- 更新城市顯示 ---
+    # --- DataFrame -> GeoJSON ---
+    def df_to_geojson(df):
+        return {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [row["longitude"], row["latitude"]],
+                    },
+                    "properties": {
+                        "name": row["name"],
+                        "country": row["country"],
+                        "population": row["population"],
+                    },
+                }
+                for _, row in df.iterrows()
+            ],
+        }
+
+    # --- 更新城市點 layer ---
     def update_city_layer(change=None):
-        # 移除舊圖層
         if "Cities Layer" in m.layer_dict:
             m.remove_layer("Cities Layer")
 
-        # 查詢人口 > slider.value 的城市
         df = con.sql(f"""
             SELECT name, country, population, latitude, longitude
             FROM Cities
             WHERE population >= {pop_slider.value};
         """).df()
 
-        # 加到地圖上（點 + popup）
-        m.add_points_from_xy(
-            df,
-            x="longitude",
-            y="latitude",
-            popup=["name", "country", "population"],
+        geojson_data = df_to_geojson(df)
+
+        m.add_geojson(
+            data=geojson_data,
             name="Cities Layer",
-            radius=5,
-            color="#ff0000",
+            layer_type="circle",
+            paint={
+                "circle-radius": 4,
+                "circle-color": "#ff0000",
+            },
+            popup=["name", "country", "population"],
         )
 
     update_city_layer()
