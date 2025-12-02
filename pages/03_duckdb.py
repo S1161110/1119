@@ -114,11 +114,13 @@ def Page():
             value=selected_country,
             values=all_countries.value
         )
-
-        solara.Input(
+        # 使用 solara.Slider
+        solara.Slider(
             label="最低人口",
             value=min_population,
-            type="int",
+            min=0,
+            max=10000000,
+            step=10000
         )
 
     if selected_country.value and not data_df.value.empty:
