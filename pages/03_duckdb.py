@@ -142,13 +142,6 @@ def Page():
             value=selected_country,
             values=all_countries.value
         )
-        solara.Slider(
-            label="最低人口",
-            value=min_population,
-            min=0,
-            max=10000000,
-            step=10000
-        )
 
     if selected_country.value and not data_df.value.empty:
         CityMap(data_df.value, min_population.value)
