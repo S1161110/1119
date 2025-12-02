@@ -1,112 +1,52 @@
 import duckdb
-import solara
-import ipywidgets as widgets
+import pandas as pd
 import leafmap.maplibregl as leafmap
-
+import json
 
 def create_map():
 
-    # --- 建立世界地圖 ---
-    m = leafmap.Map(
-        add_sidebar=True,
-        sidebar_visible=True,
-        height="800px",
-        zoom=2,
-        center=[20, 0],
-    )
-
-    # 世界國界
-    m.add_geojson(
-        data="https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson",
-        name="World Countries",
-        layer_type="line",
-        paint={
-            "line-color": "rgba(0,0,0,0.5)",
-            "line-width": 1,
-        },
-    )
-
-    # --- DuckDB 載入城市資料 ---
+    # DuckDB 讀取遠端資料
     con = duckdb.connect()
     con.install_extension("httpfs")
     con.load_extension("httpfs")
 
-    url = "https://data.gishub.org/duckdb/cities.csv"
+    df = con.sql("""
+        SELECT name, country, population, lon, lat
+        FROM 'https://data.gishub.org/duckdb/cities.csv'
+        LIMIT 200;
+    """).df()
 
-    con.sql(f"""
-        CREATE TABLE IF NOT EXISTS Cities AS 
-        SELECT * FROM read_csv('{url}');
-    """)
+    # 轉 GeoJSON
+    features = []
+    for _, row in df.iterrows():
+        features.append({
+            "type": "Feature",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [row["lon"], row["lat"]],
+            },
+            "properties": {
+                "name": row["name"],
+                "country": row["country"],
+                "population": row["population"],
+            },
+        })
 
-    minpop, maxpop = con.sql(
-        "SELECT MIN(population), MAX(population) FROM Cities"
-    ).fetchone()
+    geojson_data = {
+        "type": "FeatureCollection",
+        "features": features
+    }
 
-    # --- UI ---
-    pop_slider = widgets.IntSlider(
-        description="人口大於：",
-        min=int(minpop),
-        max=int(maxpop),
-        step=10000,
-        value=500000,
-        continuous_update=False,
-        style={"description_width": "initial"},
+    # 建地圖
+    m = leafmap.Map(
+        center=[25.03, 121.56],  # 台北
+        zoom=2,
+        height="750px",
+        style="https://demotiles.maplibre.org/style.json"
     )
 
-    # --- DataFrame -> GeoJSON ---
-    def df_to_geojson(df):
-        return {
-            "type": "FeatureCollection",
-            "features": [
-                {
-                    "type": "Feature",
-                    "geometry": {
-                        "type": "Point",
-                        "coordinates": [row["longitude"], row["latitude"]],
-                    },
-                    "properties": {
-                        "name": row["name"],
-                        "country": row["country"],
-                        "population": row["population"],
-                    },
-                }
-                for _, row in df.iterrows()
-            ],
-        }
-
-    # --- 更新城市點 layer ---
-    def update_city_layer(change=None):
-        if "Cities Layer" in m.layer_dict:
-            m.remove_layer("Cities Layer")
-
-        df = con.sql(f"""
-            SELECT name, country, population, latitude, longitude
-            FROM Cities
-            WHERE population >= {pop_slider.value};
-        """).df()
-
-        geojson_data = df_to_geojson(df)
-
-        m.add_geojson(
-            data=geojson_data,
-            name="Cities Layer",
-            layer_type="circle",
-            paint={
-                "circle-radius": 4,
-                "circle-color": "#ff0000",
-            },
-            popup=["name", "country", "population"],
-        )
-
-    update_city_layer()
-    pop_slider.observe(update_city_layer, names="value")
-
-    m.add_to_sidebar(pop_slider, label="人口篩選")
+    # 加 GeoJSON 到 MapLibre
+    geojson_str = json.dumps(geojson_data)
+    m.add_geojson(geojson_str, layer_name="cities")
 
     return m
-
-
-@solara.component
-def Page():
-    m = create_map()
-    return m.to_solara()
