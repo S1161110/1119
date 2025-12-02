@@ -10,7 +10,6 @@ CITIES_CSV_URL = 'https://data.gishub.org/duckdb/cities.csv'
 
 all_countries = solara.reactive([])
 selected_country = solara.reactive("")
-min_population = solara.reactive(0)
 data_df = solara.reactive(pd.DataFrame())
 
 # -----------------------------
@@ -54,8 +53,6 @@ def load_filtered_data():
             LIMIT 100
         """).df()
         data_df.set(df_result)
-        if not df_result.empty:
-            min_population.set(int(df_result['population'].min()))
         con.close()
     except Exception as e:
         print(f"Error executing query: {e}")
@@ -65,18 +62,13 @@ def load_filtered_data():
 # 3. Leafmap 地圖 component
 # -----------------------------
 @solara.component
-def CityMap(df: pd.DataFrame, min_pop: int):
-    """顯示簡單城市地圖，根據人口區間顯示顏色"""
+def CityMap(df: pd.DataFrame):
+    """顯示簡單城市地圖"""
     if df.empty:
         return solara.Info("沒有城市數據可顯示")
     
-    # 過濾人口
-    df_filtered = df[df['population'] >= min_pop]
-    if df_filtered.empty:
-        return solara.Info("沒有符合篩選的人口城市")
-    
     # 以第一個城市中心作為地圖中心
-    center = [df_filtered['latitude'].iloc[0], df_filtered['longitude'].iloc[0]]
+    center = [df['latitude'].iloc[0], df['longitude'].iloc[0]]
     m = leafmap.Map(
         center=center,
         zoom=3,
@@ -95,6 +87,17 @@ def CityMap(df: pd.DataFrame, min_pop: int):
         paint={"line-color": "#000000", "line-width": 1},
     )
     
+    # 加城市點
+    features = []
+    for _, row in df.iterrows():
+        features.append({
+            "type": "Feature",
+            "geometry": {"type": "Point", "coordinates": [row["longitude"], row["latitude"]]},
+            "properties": {"name": row["name"], "population": int(row["population"]) if row["population"] else None}
+        })
+    geojson = {"type": "FeatureCollection", "features": features}
+    m.add_geojson(geojson, name="Cities")
+    
     return m.to_solara()
 
 # -----------------------------
@@ -102,7 +105,7 @@ def CityMap(df: pd.DataFrame, min_pop: int):
 # -----------------------------
 @solara.component
 def Page():
-    solara.Title("城市地圖篩選 (人口區間顏色)")
+    solara.Title("城市地圖篩選 (簡單平面)")
 
     solara.use_effect(load_country_list, dependencies=[])
     solara.use_effect(load_filtered_data, dependencies=[selected_country.value])
@@ -113,16 +116,9 @@ def Page():
             value=selected_country,
             values=all_countries.value
         )
-        solara.Slider(
-            label="最低人口",
-            value=min_population,
-            min=0,
-            max=10000000,
-            step=10000
-        )
 
     if selected_country.value and not data_df.value.empty:
-        CityMap(data_df.value, min_population.value)
+        CityMap(data_df.value)
     else:
         solara.Info("正在載入資料...")
 
