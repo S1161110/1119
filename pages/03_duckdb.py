@@ -16,6 +16,7 @@ data_df = solara.reactive(pd.DataFrame())
 # 2. 資料載入函數
 # -----------------------------
 def load_country_list():
+    """初始化：載入國家清單"""
     try:
         con = duckdb.connect()
         con.install_extension("httpfs")
@@ -36,6 +37,7 @@ def load_country_list():
         print(f"Error loading countries: {e}")
 
 def load_filtered_data():
+    """根據選中國家載入城市資料"""
     country_name = selected_country.value
     if not country_name:
         return
@@ -61,13 +63,15 @@ def load_filtered_data():
 # -----------------------------
 @solara.component
 def CityMap(df: pd.DataFrame):
+    """顯示簡單城市地圖"""
     if df.empty:
         return solara.Info("沒有城市數據可顯示")
     
-    # 地圖中心設為世界中心，zoom 調整讓整個世界一次顯示
+    # 以第一個城市中心作為地圖中心
+    center = [df['latitude'].iloc[0], df['longitude'].iloc[0]]
     m = leafmap.Map(
-        center=[0, 0],
-        zoom=1.5,
+        center=center,
+        zoom=3,
         add_sidebar=True,
         height="600px"
     )
@@ -75,7 +79,7 @@ def CityMap(df: pd.DataFrame):
     # 簡單平面底圖
     m.add_basemap("Carto Light", before_id=m.first_symbol_layer_id)
     
-    # 加國家邊界（全世界一次）
+    # 加國家邊界
     m.add_geojson(
         "https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson",
         name="Countries",
@@ -101,7 +105,7 @@ def CityMap(df: pd.DataFrame):
 # -----------------------------
 @solara.component
 def Page():
-    solara.Title("城市地圖篩選 (全世界平面一次顯示)")
+    solara.Title("國家城市篩選")
 
     solara.use_effect(load_country_list, dependencies=[])
     solara.use_effect(load_filtered_data, dependencies=[selected_country.value])
