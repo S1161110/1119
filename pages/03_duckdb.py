@@ -63,19 +63,31 @@ def load_filtered_data():
 # -----------------------------
 @solara.component
 def CityMap(df: pd.DataFrame):
-    """顯示城市地圖"""
+    """顯示簡單城市地圖"""
     if df.empty:
         return solara.Info("沒有城市數據可顯示")
+    
+    # 以第一個城市中心作為地圖中心
     center = [df['latitude'].iloc[0], df['longitude'].iloc[0]]
     m = leafmap.Map(
         center=center,
-        zoom=4,
+        zoom=3,
         add_sidebar=True,
         height="600px"
     )
-    m.add_basemap("Esri.WorldImagery", before_id=m.first_symbol_layer_id)
     
-    # 轉成 GeoJSON
+    # 簡單平面底圖
+    m.add_basemap("Carto Light", before_id=m.first_symbol_layer_id)
+    
+    # 加國家邊界
+    m.add_geojson(
+        "https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson",
+        name="Countries",
+        layer_type="line",
+        paint={"line-color": "#000000", "line-width": 1},
+    )
+    
+    # 加城市點
     features = []
     for _, row in df.iterrows():
         features.append({
@@ -87,7 +99,8 @@ def CityMap(df: pd.DataFrame):
             }
         })
     geojson = {"type": "FeatureCollection", "features": features}
-    m.add_geojson(geojson)
+    m.add_geojson(geojson, name="Cities")
+    
     return m.to_solara()
 
 # -----------------------------
@@ -95,12 +108,11 @@ def CityMap(df: pd.DataFrame):
 # -----------------------------
 @solara.component
 def Page():
-    solara.Title("城市地圖篩選 (DuckDB + Solara + Leafmap)")
-    
+    solara.Title("城市地圖篩選 (簡單平面)")
+
     solara.use_effect(load_country_list, dependencies=[])
     solara.use_effect(load_filtered_data, dependencies=[selected_country.value])
 
-    # 篩選下拉框
     with solara.Card(title="城市篩選器"):
         solara.Select(
             label="選擇國家",
@@ -108,7 +120,6 @@ def Page():
             values=all_countries.value
         )
 
-    # 顯示地圖
     if selected_country.value and not data_df.value.empty:
         CityMap(data_df.value)
     else:
